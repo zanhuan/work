@@ -1,0 +1,70 @@
+精髓：
+1.springboot启动会加载大量的自动配置类
+2.看需要的功能有没有默认写好的自动配置类
+3.再看这个自动配置类中到底配置了那些组件（只要有要用的组件，就不用配置了）
+4.给容器中自动添加组件，会从properties类中获取某些属性，可以在配置文件中指定这些属性的值
+
+xxxAutoConfiguration：自动配置类
+给容器中添加组件
+xxxProperties:封装配置文件中的相关属性
+
+
+springboot自动配置原理：
+1.springboot启动的时候加载主配置类，开启了自动配置的功能@EnableAutoConfiguration
+2.@EnableAutoConfiguration的作用
+    1）.利用EnableAutoConfigurationImport给容器中导入一些组件
+    2）.详细可查看selectimport的内容
+    3）.List<String> configuration=getCondidateConfiguations(annotationMetadata,attributes);
+        获取候选的配置
+            getCondidateConfiguations方法里的SpringFactoriesLoader.loadFactoryNames();
+            扫描所有jar包类路经下的META-INF/spring.factories
+            把扫描到的这些文件的内容包装成properties对象
+            从properties中获取到EnableAutoConfiguration.class类对应的值，然后把他们添加到容器中
+        将类路径下的META-INF/spring.factories里配置的所有EnableAutoConfiguration的值加入到了容器中
+        每一个xxxConfiguration类都是容器中的一个组件，都会加入到容器中；用他们来做自动配置
+3.每一个自动配置类进行自动配置功能
+4.以HttpEncodingAutoConfiguration(Http编码自动配置)为例解释自动配置原理
+    @Configuration(proxyBeanMethods = false)    //表示这是一个配置类，可以给容器中添加组件
+
+    @EnableConfigurationProperties({HttpProperties.class})  //启动指定类的
+     ConfigurationProperties功能将配置文件中对应的值和HttpEncodingProperties绑定起来
+
+    @ConditionalOnWebApplication(type = Type.SERVLET)   //spring底层@Conditional注解，根据不
+      同的条件，如果满足指定的条件，整个配置类里面的配置就会生效；  判断当前应用是否是WEB应用，如果是
+      当前的配置类生效
+
+    @ConditionalOnClass({CharacterEncodingFilter.class})    //判断当前项目有没有这个类
+      characterEncodingFilters;  springMVC中进行乱码解决的过滤器
+
+    @ConditionalOnProperty(prefix = "spring.http.encoding",value = {"enabled"},
+                            matchIfMissing = true)  //判断配置文件中是否存在某个配置spring.http.encoding.enabled
+      如果不存在，判断也是成立的。//即使配置文件中不配置spring.http.encoding.enabled=true，也是生效的.
+
+    public class HttpEncodingAutoConfiguration {
+        //已经和springboot配置文件映射了
+        private final Encoding properties;
+
+        //只有一个有参构造器的情况下，参数的值就会从容器中拿
+        public HttpEncodingAutoConfiguration(HttpProperties properties) {
+            this.properties = properties.getEncoding();
+        }
+
+        @Bean   //给容器中添加一个组件，这个组件的某些值要从properties中获取
+        @ConditionalOnMissingBean
+        public CharacterEncodingFilter characterEncodingFilter() {
+            CharacterEncodingFilter filter = new OrderedCharacterEncodingFilter();
+            filter.setEncoding(this.properties.getCharset().name());
+            filter.setForceRequestEncoding(this.properties.shouldForce(org.springframework.boot.autoconfigure.http.HttpProperties.Encoding.Type.REQUEST));
+            filter.setForceResponseEncoding(this.properties.shouldForce(org.springframework.boot.autoconfigure.http.HttpProperties.Encoding.Type.RESPONSE));
+            return filter;
+        }
+        根据当前不同的条件判断，决定这个配置类是否生效？
+        一旦这个配置文件生效，这个配置类就会给容器中添加各种组件；这些组建的属性就是从properties类中
+        获取的，这些类中的属性又是和配置文件是绑定的。
+5.在所有配置文件中能配置的属性都是在xxxproperties类中封装的，配置文件能配置什么就可以参照某个功能对
+  应这个属性类
+    @ConfigurationProperties(prefix="spring.http.encoding") //从配置文件中获取指定的值和bean属
+    性进行绑定
+    public class HttpEncodingProperties(){
+        public static final Charset DEFAULT_CHARSET=Charset.forName("UTF-8");
+    }
